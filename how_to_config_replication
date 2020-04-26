@@ -1,0 +1,16 @@
+1. Prepare two machines and install uv on both of them(please do both for step 2-4 too).
+2. Copy repsys and repconfig under sample account XDEMO to $UVHOME
+3. Edit repsys under $UVHOME: 
+	Change "pub_hostname_or_ip" to your real hostname or IP of the publisher machine.
+	Change "sub_hostname_or_ip" to your real hostname or IP of the subscriber machine.
+4. Restart uv.
+Now you can run "uv_repadmin report" to verify if the publisher and subscriber are in synchronized status.
+
+Run below steps only on the publisher to experience the new feature replication of sequentail I/O in UV11.3.2
+5. Go to sample account XDEMO
+6. Run below commands 
+   uv "BASIC BP WRITESEQ"
+   uv "BASIC BP WRITESEQ_BUF"
+   uv "RUN BP WRITESEQ"
+   uv "RUN BP WRITESEQ_BUF"
+

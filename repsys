@@ -1,0 +1,7 @@
+SYSTEM=P1
+HOSTNAME=pub_hostname_or_ip
+VERSION=113
+SYSTEM=S1
+HOSTNAME=sub_hostname_or_ip
+VERSION=113
+
