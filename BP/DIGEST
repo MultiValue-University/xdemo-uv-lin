@@ -1,0 +1,165 @@
+* The following 8 lines are for universe
+system = "UniVerse"
+$INCLUDE UNIVERSE.INCLUDE MACHINE.NAME
+$INCLUDE UNIVERSE.INCLUDE SSL.H
+
+
+data = "digest.txt"
+
+start:
+IF system = "UniData" THEN
+	* unidata code 
+	sys = SYSTEM(33)
+	IF sys = "UNIX" THEN
+		OS.TYPE = sys
+	END ELSE
+		OS.TYPE = "MSWIN"
+	END
+	SYS_SECU_FILE = "_SECUCTX_"
+END ELSE
+	* universe code
+	SYS_SECU_FILE = "&SECUCTX&"
+END
+
+*****
+* Enable message logging
+*****
+a = protocolLogging("digest.log", "ON", 10)
+
+*****
+* test DIGEST
+*****
+PRINT
+PRINT "testing DIGEST function..."
+PRINT "test MD5..using SSL_LOC_FILE..."
+a = DIGEST("MD5",data,SSL_LOC_FILE,result)
+PRINT "should see 0: ":a
+*PRINT "digest: ":result
+in = result
+GOSUB print.binary
+case = 1
+expecting = 0
+GOSUB checkreturn
+cmd = "SH -c 'openssl dgst -md5 digest.txt'"
+GOSUB compar.do
+
+PRINT
+PRINT "testing DIGEST function..."
+PRINT "test MD5..using SSL_LOC_STRING..."
+data1 = "123456789012345678901234567890abcdefghigklmnopqrstuvwxyz01234567890"
+a = DIGEST("MD5",data1,SSL_LOC_STRING,result)
+PRINT "should see 0: ":a
+*PRINT "digest: ":result
+in = result
+GOSUB print.binary
+case = 2
+expecting = 0
+GOSUB checkreturn
+cmd = "SH -c 'openssl dgst -md5 digest.txt'"
+GOSUB compar.do
+
+PRINT
+PRINT "testing DIGEST function..."
+PRINT "test SHA1...using SSL_LOC_FILE..."
+a = DIGEST("SHA1",data,SSL_LOC_FILE,result)
+PRINT "should see 0: ":a
+*PRINT "digest: ":result
+in = result
+GOSUB print.binary
+case =3
+expecting = 0
+GOSUB checkreturn
+cmd = "SH -c 'openssl dgst -sha1 digest.txt'"
+GOSUB compar.do
+
+PRINT
+PRINT "testing DIGEST function..."
+PRINT "test SHA1...using SSL_LOC_STRING..."
+data1 = "123456789012345678901234567890abcdefghigklmnopqrstuvwxyz01234567890"
+a = DIGEST("SHA1",data1,SSL_LOC_STRING,result)
+PRINT "should see 0: ":a
+*PRINT "digest: ":result
+in = result
+GOSUB print.binary
+case =4
+expecting = 0
+GOSUB checkreturn
+cmd = "SH -c 'openssl dgst -sha1 digest.txt'"
+GOSUB compar.do
+
+PRINT
+PRINT "testing DIGEST function..."
+PRINT "test sha3-256...using SSL_LOC_FILE..."
+a = DIGEST("SHA3-256",data,SSL_LOC_FILE,result)
+PRINT "should see 0: ":a
+*PRINT "digest: ":result
+in = result
+GOSUB print.binary
+case =5
+expecting = 0
+GOSUB checkreturn
+cmd = "SH -c 'openssl dgst -sha3-256 digest.txt'"
+GOSUB compar.do
+
+PRINT
+PRINT "testing DIGEST function..."
+PRINT "test sha512-224...using SSL_LOC_STRING..."
+data1 = "123456789012345678901234567890abcdefghigklmnopqrstuvwxyz01234567890"
+a = DIGEST("sha512-224",data1,SSL_LOC_STRING,result)
+PRINT "should see 0: ":a
+*PRINT "digest: ":result
+in = result
+GOSUB print.binary
+case =6
+expecting = 0
+GOSUB checkreturn
+cmd = "SH -c 'openssl dgst -sha512-224 digest.txt'"
+GOSUB compar.do
+STOP
+
+*******
+compar.do:
+PRINT "EXECUTE openssl cmd"
+*cmd = "openssl dgst -sha1 digest.txt"
+*cmd := "'"
+PRINT "executing ":cmd:" ..."
+EXECUTE cmd CAPTURING cap
+STR = cap<1>
+STR = STR[' ',2,1]
+PRINT "Universe digest result:": UPCASE(res)
+PRINT "openssl cmd digest    :": UPCASE(STR)
+IF UPCASE(STR) = UPCASE(res) THEN
+	PRINT "comparied Successful"
+END ELSE
+	PRINT "comparied Failed"
+END
+RETURN
+
+****
+**** check if return value matches expected one
+****
+checkreturn:
+
+IF expecting <> a THEN
+	errcount += 1
+	errs := "case ":case:": expecting ":expecting:", got ":a:CHAR(10)
+END
+RETURN
+
+****
+**** translate binary data into HEX
+****
+print.binary:
+res =""
+len = LEN(in)
+PRINT "digest/signature length: ":len
+*FOR i = 1 TO len
+*	res := OCONV(SEQ(SUBSTRINGS(in,i,1)),"MX") "2'0'R"
+	*PRINT OCONV(SEQ(SUBSTRINGS(in,i,1)),"MX") "2'0'R":
+*NEXT i
+res= ICONV(in,"MY")
+PRINT "digest result =":res
+PRINT
+RETURN
+
+END
