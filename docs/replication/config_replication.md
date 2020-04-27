@@ -21,15 +21,18 @@
     ./uv_repadmin report
     ```
 
-    Run below steps only on the publisher to experience the new feature replication of sequentail I/O in UV 11.3.2
+# Experience new feature
 
-5. Go to sample account XDEMO and run below commands
-    ```
-    bash-4.2$ cd XDEMO/
-    bash-4.2$ ../bin/uv
+Run below steps only on the publisher to experience the new feature replication of sequentail I/O in UV 11.3.2
 
-    > BASIC BP REP_WRITESEQ
-    > BASIC BP REP_WRITESEQ_BUF
-    > RUN BP REP_WRITESEQ
-    > RUN BP REP_WRITESEQ_BUF
-    ```
+Go to sample account XDEMO and run below commands
+
+```
+bash-4.2$ cd XDEMO/
+bash-4.2$ ../bin/uv
+
+> BASIC BP REP_WRITESEQ
+> BASIC BP REP_WRITESEQ_BUF
+> RUN BP REP_WRITESEQ
+> RUN BP REP_WRITESEQ_BUF
+```
