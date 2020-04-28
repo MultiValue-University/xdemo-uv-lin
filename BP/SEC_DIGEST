@@ -5,6 +5,7 @@ $INCLUDE UNIVERSE.INCLUDE SSL.H
 
 
 data = "digest.txt"
+UVHOME = SYSTEM(32)
 
 start:
 IF system = "UniData" THEN
@@ -40,7 +41,7 @@ GOSUB print.binary
 case = 1
 expecting = 0
 GOSUB checkreturn
-cmd = "SH -c 'openssl dgst -md5 digest.txt'"
+cmd = "SH -c ":UVHOME:"/bin/openssl dgst -md5 digest.txt"
 GOSUB compar.do
 
 PRINT
@@ -55,7 +56,7 @@ GOSUB print.binary
 case = 2
 expecting = 0
 GOSUB checkreturn
-cmd = "SH -c 'openssl dgst -md5 digest.txt'"
+cmd = "SH -c ":UVHOME:"/bin/openssl dgst -md5 digest.txt"
 GOSUB compar.do
 
 PRINT
@@ -84,7 +85,7 @@ GOSUB print.binary
 case =4
 expecting = 0
 GOSUB checkreturn
-cmd = "SH -c 'openssl dgst -sha1 digest.txt'"
+cmd = "SH -c ":UVHOME:"/bin/openssl dgst -sha1 digest.txt"
 GOSUB compar.do
 
 PRINT
@@ -98,7 +99,7 @@ GOSUB print.binary
 case =5
 expecting = 0
 GOSUB checkreturn
-cmd = "SH -c 'openssl dgst -sha3-256 digest.txt'"
+cmd = "SH -c ":UVHOME:"/bin/openssl dgst -sha3-256 digest.txt"
 GOSUB compar.do
 
 PRINT
@@ -113,7 +114,7 @@ GOSUB print.binary
 case =6
 expecting = 0
 GOSUB checkreturn
-cmd = "SH -c 'openssl dgst -sha512-224 digest.txt'"
+cmd = "SH -c ":UVHOME:"/bin/openssl dgst -sha512-224 digest.txt"
 GOSUB compar.do
 STOP
 

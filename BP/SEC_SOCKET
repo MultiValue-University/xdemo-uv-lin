@@ -1,0 +1,227 @@
+*
+* Created: 04/05/2020
+* Author: CHENG JIANG
+*
+
+***
+*** The following six lines are for universe
+system = "UniVerse"
+$INCLUDE UNIVERSE.INCLUDE MACHINE.NAME
+GOTO start
+execcmd:
+PERFORM cmd
+RETURN
+
+start:
+* universe code
+IF OS.TYPE = "MSWIN" THEN
+	cmdprefix = "DOS /c "
+END ELSE
+	cmdprefix = "SH -c "
+END
+
+
+localhost = "localhost"
+
+*** not necessary but since httpctx contains reference we have to do this
+certPath = "CAdir"
+IF OS.TYPE = "MSWIN" THEN
+	cmd1 = cmdprefix:"mkdir ":certPath
+	cmd2 = cmdprefix:"rm svr.log"
+END ELSE
+	cmd1 = cmdprefix:"mkdir ":certPath
+	cmd2 = cmdprefix:"rm svr.log"
+END
+cmd = cmd1
+GOSUB execcmd
+cmd = cmd2
+GOSUB execcmd
+
+ret = protocolLogging("svr.log", "ON", 10)
+
+*timeout = 300000
+timeout = 0
+DIM sockets(30)
+errmsg = ""
+addr = ""
+name = ""
+data = ""
+size = 0
+
+bufsize = 16384
+
+backlog = 1
+blocking = 2
+secu = 'Y'
+
+server_port = 30000
+PRINT "use server port ":server_port:", blocking=":blocking
+PRINT
+
+IF secu = "" THEN
+* non-secure socket
+	ret = initServerSocket(localhost,server_port,backlog,svrsock)
+END ELSE
+* secure socket
+* read security context
+	ret = loadSecurityContext(ctx,"serverctx","my password")
+	*ret = addAuthenticationRule(ctx, 1, 'VerificationStrength', 'GENEROUS')
+    PRINT 'ret = : ' : ret
+	IF ret = 0 THEN
+		PRINT "security context loaded"
+		cfg = ""
+		a = showSecurityContext(ctx, cfg)
+		PRINT cfg
+	END ELSE
+		PRINT "error loading security context"
+		STOP
+	END
+
+	ret = initSecureServerSocket(localhost,server_port,backlog,svrsock,ctx)
+END
+IF ret = 0 THEN
+	PRINT "server socket created!"
+	a = getSocketInformation(svrsock, 1, sockinfo)
+	PRINT "listener port (:"server_port:") socket info: ":sockinfo
+	PRINT
+END ELSE
+	ret = getSocketErrorMessage(ret, errmsg)
+	PRINT "failed to create server socket: ":errmsg
+	STOP
+END
+
+
+FOR I = 1 TO backlog
+	PRINT "accept client ":I
+	*** This call MUST be in blocking mode (1) no matter what 
+	ret = acceptConnection(svrsock, 1, timeout, addr, name, clntsock)
+	IF ret = 0 THEN
+		PRINT "got client ":I:" ":addr:" ":name
+		sockets(I) = clntsock
+		a = getSocketInformation(clntsock, 0, sockinfo)
+		PRINT "client ":I:"   info: ":sockinfo
+		sockinfo = ""
+		a = getSocketInformation(clntsock, 1, sockinfo)
+		PRINT "self end ":I:" info: ":sockinfo
+		PRINT
+		PRINT "set buffer size to ":bufsize
+		options = "SNDBUF":@VM:bufsize:@FM:"RCVBUF":@VM:bufsize
+		a = setSocketOptions(clntsock, options)
+	END ELSE
+		ret = getSocketErrorMessage(ret, errmsg)
+		PRINT "accept error: ":errmsg
+		STOP
+	END
+NEXT I
+
+PRINT "reading ..."
+PRINT
+FOR I = 1 TO backlog
+	PRINT "reading from client ":I
+	clntsock = sockets(I)
+retry:
+	ret = readSocket(clntsock,data,100000,timeout,blocking,size)
+	*** 31/12: RETRY in non-blocking mode
+	*** 31: TRY_AGAIN: SSL socket needs retry 
+	*** 12: WOULDBLOCK: socket currently has no data
+	*PRINT "1: readSocket return ":ret
+	IF ret = 31 OR ret = 12 THEN
+		PRINT "retry read..."
+		*** this SLEEP is optional, can do something useful in real
+		*** application, same for following processings
+		*SLEEP 1
+		GOTO retry
+	END
+
+	IF ret = 0 THEN
+		toread = EXTRACT(data,1,0,0)
+		PRINT "expecting data size = ":toread
+		
+*** readSocket may return less than full data written by client
+*** so we must be prepared to read multiple times
+*** toread maybe a little bit too high? we risk losing some data in socket
+***		toread -= size + 2
+		toread -= size
+		LOOP
+		UNTIL toread <= 0 DO
+moretry:
+			ret = readSocket(clntsock,more,toread,timeout,blocking,size)
+			*PRINT "2: readSocket return ":ret
+			** non-blocking mode: 31/12: need RETRY
+			IF ret = 31 OR ret = 12 THEN
+				PRINT "more try read..."
+				*SLEEP 1
+				GOTO moretry
+			END
+
+			IF ret = 0 THEN
+				data := more	
+				toread -= size
+			END ELSE
+				toread = 0
+			END
+		REPEAT
+		PRINT "total actual read data size: ":LEN(data)
+*** display only some limited amount of useful data
+		PRINT "data=== ":SUBSTRINGS(EXTRACT(data,2,0,0), 1, 50)
+
+	END ELSE
+		ret = getSocketErrorMessage(ret, errmsg)
+		PRINT "read error: ":errmsg
+	END
+
+*** remove "length" from beginning of read data
+*** and append new length to data to be written to client
+	data = "from server ":I:" ":EXTRACT(data,2,0,0)
+	len = LEN(data)
+	len += LEN(len) + 1
+	data = len:@FM:data
+	PRINT
+
+	*** prepare to handle blocking and non-blocking mode gracefully
+	twsize = 0
+	LOOP
+	UNTIL twsize >= len DO
+		PRINT "sending ":LEN(data):" chars..."
+		ret = writeSocket(clntsock, data, timeout, blocking, size)
+
+		*** must check actual written size, especially for non-blocking
+		*** mode processing.
+		IF ret = 0 THEN 
+			PRINT size:" chars written to socket"
+			twsize += size
+			*** adjust buffer for data already sent
+			data = data[size,LEN(data)-size]
+		END ELSE IF ret <> 31 AND ret <> 12 THEN
+			* error
+			ret = getSocketErrorMessage(ret, errmsg)
+			PRINT "write error: ":errmsg
+			* should do more to cleanup/exit in real situation
+			GOTO finish
+		END ELSE
+			* non-blocking: got 31 (TRY_AGAIN) or 12 (WOULDBLOCK)
+			PRINT "retry write..."
+		END
+	REPEAT
+	PRINT "total ":twsize:" chars written to client"
+NEXT I
+
+finish:
+SLEEP 2
+PRINT
+PRINT "closing socket ..."
+FOR I = 1 TO backlog
+	PRINT "closing client ":I
+	ret = closeSocket(sockets(I))
+NEXT I
+
+ret = closeSocket(svrsock)
+
+IF OS.TYPE = "MSWIN" THEN
+	cmd = cmdprefix:"rm -Rf CAdir"
+END ELSE
+	cmd = cmdprefix:"rm -Rf CAdir"
+END
+GOSUB execcmd
+
+END

@@ -1,0 +1,243 @@
+*
+* Created: 04/05/2020
+* Author: CHENG JIANG
+*
+
+***
+*** The following six lines are for universe
+system = "UniVerse"
+$INCLUDE UNIVERSE.INCLUDE MACHINE.NAME
+GOTO start
+execcmd:
+PERFORM cmd
+RETURN
+
+
+start:
+IF system = "UniData" THEN
+	* unidata code 
+	sys = SYSTEM(33)
+	IF sys = "UNIX" THEN
+		OS.TYPE = sys
+	END ELSE
+		OS.TYPE = "MSWIN"
+	END
+	cmdprefix = ""
+END ELSE
+	* universe code
+	IF OS.TYPE = "MSWIN" THEN
+		cmdprefix = "DOS /c "
+	END ELSE
+		cmdprefix = "SH -c "
+	END
+END
+
+host = "localhost"
+
+cmd = cmdprefix:"rm clnt.log"
+GOSUB execcmd
+
+ret = protocolLogging("clnt.log", "ON", 10)
+DIM sockets(30)
+
+bufsize = 16384
+
+timeout = 300000
+*timeout = 5000
+
+blocking = 1
+count = 0
+PRINT "secure socket[yes] ":
+INPUT secu
+PRINT "# of clients[default 1, max 30] ":
+INPUT count
+IF count="" OR count<=0 THEN
+	count = 1
+END ELSE IF count > 30 THEN
+	count = 30
+END
+PRINT "blocking mode[default Y] ":
+INPUT blocking
+IF blocking="" OR blocking="Y" OR blocking='y' THEN
+	blocking = 1
+END ELSE
+	blocking = 2
+END
+
+IF secu <> "" THEN
+	ret = loadSecurityContext(ctx,"clientctx","my password")
+	IF ret  = 0 THEN
+		PRINT "security context loaded!"
+		cfg = ""
+		a = showSecurityContext(ctx, cfg)
+		PRINT cfg
+	END ELSE
+		PRINT "security context can not be loaded!"
+		STOP
+	END
+END
+
+server_port = 30000
+PRINT "using server port: ":server_port
+PRINT
+FOR I = 1 TO count
+	*** MUST be in blocking mode (1) for these calls
+	IF secu = "" THEN
+		ret = openSocket(host, server_port, 1, timeout, sockets(I))
+	END ELSE
+		ret = openSecureSocket(host, server_port, 1, timeout, sockets(I), ctx)
+	END
+	IF ret = 0 THEN
+		PRINT "socket opened!"
+		a = getSocketInformation(sockets(I), 0, sockinfo)
+		PRINT "    Server   socket info: ":sockinfo
+		sockinfo = ""
+		a = getSocketInformation(sockets(I), 1, sockinfo)
+		PRINT "    Self end socket info: ":sockinfo
+		PRINT
+		options = "SNDBUF":@VM:bufsize:@FM:"RCVBUF":@VM:bufsize
+		a = setSocketOptions(sockets(I), options)
+	END ELSE
+		ret = getSocketErrorMessage(ret, errmsg)
+		PRINT "open socket error: ":errmsg
+		STOP
+	END
+NEXT I
+
+GOTO aaa
+*** these statements are for memory allocation test, not needed now
+test:
+s1 = sockets(1)
+s2 = s1
+s3 = s2
+s4 = s3
+s5 = s1
+
+a = closeSocket(s1)
+a = closeSocket(s2)
+a = closeSocket(s3)
+a = closeSocket(s4)
+a = closeSocket(s5)
+a = closeSocket(s5)
+a = closeSocket(s5)
+a = closeSocket(sockets(1))
+a = closeSocket(sockets(1))
+
+aaa:
+*GOTO finish
+
+* prepare data to send to server
+data = ""
+*data := STR('*', RND(16383))
+data := STR('*', 16385)
+len = LEN(data)
+len += LEN(len) + 1
+data = len:@FM:data
+PRINT "data length: ":LEN(data)
+PRINT "data===":SUBSTRINGS(data, 1, 40)
+
+FOR I = 1 TO count
+	PRINT
+	twsize = 0
+
+retrywrite:
+	LOOP
+	UNTIL twsize >= len DO
+		PRINT "sending ":LEN(data):" chars..."
+		ret = writeSocket(sockets(I), data, timeout, blocking, size)
+
+		*** must check actual written size, especially necessasy for
+		*** non-blocking mode processing.
+		IF ret = 0 THEN 
+			PRINT size:" chars written to socket"
+			twsize += size
+			data = data[size,LEN(data)-size]
+		END ELSE IF ret <> 31 AND ret <> 12 THEN
+			* unrecoverable error
+			ret = getSocketErrorMessage(ret, errmsg)
+			PRINT "write error: ":errmsg
+			GOTO finish
+		END ELSE
+			* non-blocking mode: 31 (TRY_AGAIN) or 12 (WOULDBLOCK)
+			PRINT "retry write..."
+		END
+	REPEAT
+			
+	IF ret = 0 THEN
+		PRINT "total ":twsize:" chars written to server"
+	END
+
+retry:
+	ret = readSocket(sockets(I), data, size+100, timeout, blocking, size)
+	*PRINT "1: readSocket return ":ret
+	* non-blocking mode: 31/12: RETRY
+	IF ret = 31 OR ret = 12 THEN
+		PRINT "retry read..."
+		*SLEEP 1
+		GOTO retry
+	END
+
+	IF ret = 0 THEN
+		PRINT size:" chars read from server socket by first read"
+		PRINT I:" data: ":SUBSTRINGS(data,1,40)
+		toread = EXTRACT(data,1,0,0)
+		PRINT "expecting ":toread:" bytes from server"
+*** 'toread' maybe a little to high?
+*** we risk losing some data in socket
+***		toread -= size + 2
+		toread -= size
+		LOOP UNTIL toread <= 0 DO
+moretry:
+			ret = readSocket(sockets(I),more,toread,timeout,blocking,size)
+			*PRINT "2: readSocket return ":ret
+			*** non-blocking mode: need retry?
+			IF ret = 31 OR ret = 12 THEN
+				PRINT "more retry read..."
+				*SLEEP 1
+				GOTO moretry
+			END
+			IF ret = 0 THEN
+				data := more
+				toread -= size
+			END ELSE
+				toread = 0
+			END
+		REPEAT
+		PRINT "total actual read data size: ":LEN(data)
+	END ELSE
+		ret = getSocketErrorMessage(ret, errmsg)
+		PRINT "read error: ":errmsg
+		GOTO finish
+	END
+	
+*** prepare to send really large data
+*** need to remove length value from data read from client
+
+**** appparently uv's RND() implementations for UNIX and WINDOWS
+**** are too much different that we need to use different length for
+**** each to make test's time behavior similar. For Unidata there is
+**** no need to make such a difference.
+	IF OS.TYPE = "MSWIN" THEN
+	    IF system = "UniVerse" THEN myrnd = RND(2000001)
+	    ELSE myrnd = RND(200001)
+	END ELSE
+		myrnd = RND(200001)
+	END
+	data = SUBSTRINGS(EXTRACT(data,2,0,0),1,100) : STR('*',17*myrnd)
+	len = LEN(data)
+	len += LEN(len) + 1
+	data = len:@FM:data 
+ 
+NEXT I
+
+finish:
+
+SLEEP 2
+PRINT
+PRINT "closing socket ..."
+
+FOR I = 1 TO count
+	ret = closeSocket(sockets(I))
+NEXT I
+
+END

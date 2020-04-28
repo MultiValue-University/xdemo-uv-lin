@@ -1,0 +1,201 @@
+*
+* Created: 04/05/2020
+* Author: CHENG JIANG
+*
+* Create default SCRs for socket and client
+*
+
+system = "UniVerse"
+$INCLUDE UNIVERSE.INCLUDE MACHINE.NAME
+$INCLUDE UNIVERSE.INCLUDE SSL.H
+
+* The following lines are for unidata
+*system = "UniData"
+*$INCLUDE INCLUDE SSL.H
+
+**
+** COMMON varibales
+**
+certroot = @PATH:"\certs\"
+certpath = ""
+status = 0
+ctx = ""
+authdepth = 3
+DIM CAcerts(5)
+svrclnt = 0
+EQUATE LF TO CHAR(010)
+
+status = protocolLogging("createctx.log", "ON", 10)
+
+GOSUB CHECK.VOC
+
+**
+** serverctx
+**
+scrname = "serverctx"
+isserver= 1
+clientauth = 0
+cacount = 2 
+CAcerts(1) = "root_ca.crt"
+CAcerts(2) = "l2_ca.crt"
+selfcert = "server.crt"
+privkey = "serverkey.pem"
+pass = "my password"
+peername = "client@myco.com"
+authstrength = "STRICT"
+
+GOSUB createSCR
+
+
+**
+** clientctx
+**
+scrname = "clientctx"
+isserver= 0
+clientauth = 0
+cacount = 1 
+CAcerts(1) = "root_ca.crt"
+selfcert = "client.crt"
+privkey = "clientkey.pem"
+pass = "my password"
+peername = "root_ca@myco.com":@FM:"l2_ca@myco.com":@FM:"server@myco.com":@FM:"client@myco.com"
+authstrength = "STRICT"
+
+GOSUB createSCR
+
+STOP
+
+***
+*** Subroutine to create a SCR
+***
+createSCR:
+PRINT "creating SCR ":scrname:" ..."
+
+
+* server or client?
+IF isserver = 1 THEN
+	svrclnt = SSL_SERVER
+END ELSE
+	svrclnt = SSL_CLIENT
+END
+
+* create SCR
+status = createSecurityContext(ctx, SSL_TLSV13)
+IF status <> 0 THEN
+	PRINT "cannot create SCR"
+	GOTO errexit
+END
+
+* add self cert
+IF selfcert <> "" THEN
+	certpath = certroot:selfcert
+	status = addCertificate(certpath, SSL_CERT_SELF, SSL_FMT_PEM, SSL_KEY_RSA, ctx)
+	IF status <> 0 THEN 
+		PRINT "cannot add cert ":certpath
+		GOTO errexit
+	END
+
+	IF privkey = "" THEN
+		PRINT "private key is not specified"
+		GOTO errexit
+	END
+	certpath = certroot:privkey
+	status = setPrivateKey(certpath, SSL_FMT_PEM, SSL_LOC_FILE, pass, SSL_NO_VALIDATE, ctx) 
+	IF status <> 0 THEN 
+		PRINT "cannot add key ":certpath
+		GOTO errexit
+	END
+END
+
+* add CA certs
+IF cacount > 0 THEN
+	FOR I=1 TO cacount
+		certpath = certroot:CAcerts(I)
+		status = addCertificate(certpath, SSL_CERT_CA, SSL_FMT_PEM, SSL_KEY_RSA, ctx)
+		IF status <> 0 THEN
+			PRINT "cannot add CA certs ":certpath
+			GOTO errexit
+		END
+	NEXT I
+END
+
+* set auth depth
+status = setAuthenticationDepth(ctx, authdepth, svrclnt)
+IF status <> 0 THEN
+	PRINT "cannot set auth depth ":authdepth
+	GOTO errexit
+END
+
+* set auth rules
+* set auth strength
+status = addAuthenticationRule(ctx, svrclnt, SSL_RULE_STRENGTH, authstrength) 
+IF status <> 0 THEN
+	PRINT "cannot set auth strength ":authstrength
+	GOTO errexit
+END
+
+* set auth peer name
+status = addAuthenticationRule(ctx, svrclnt, SSL_RULE_PEER_NAME, peername) 
+IF status <> 0 THEN
+	PRINT "cannot set auth peer name ":peername
+	GOTO errexit
+END
+
+* set client auth
+status = setClientAuthentication(ctx, clientauth)
+IF status <> 0 THEN
+	PRINT "cannot set client auth":clientauth
+	GOTO errexit
+END
+
+* save SCR
+status = saveSecurityContext(ctx, scrname, pass)
+IF status <> 0 THEN
+	PRINT "cannot save SCR ":scrname
+	GOTO errexit
+END
+
+config = ""
+status = showSecurityContext(ctx, config)
+IF status <> 0 THEN
+	PRINT "cannot showSecurityContext":scrname
+	GOTO errexit
+END
+PRINT config
+
+errexit:
+*** final messsage
+IF status = 0 THEN
+	PRINT scrname:" successfully created."
+END ELSE
+	PRINT scrname:" was not created: ":status
+END
+RETURN
+
+CHECK.VOC:
+	STAT = ''
+	Voc = ''
+	Item = ''
+	
+	OPENPATH "D_&SECUCTX&" TO FILE.HANDLE ON ERROR
+		STAT=STATUS()
+		RESULT = RESULT : 'STATUS()=' : STAT : ' there is an error on open D_&SECUCTX&' : LF
+	END THEN
+		STAT=STATUS()
+		RESULT = RESULT : 'STATUS()=' : STAT : ' D_&SECUCTX& file is existing need to update an entry to the VOC' : LF
+		OPEN 'VOC' TO Voc THEN
+			Item='F':@FM
+			Item:="&SECUCTX&":@FM
+			Item:="D_&SECUCTX&"
+			WRITE Item ON Voc,'&SECUCTX&'
+			CLOSE Voc
+			RESULT = RESULT : 'succeed to update VOC file' : LF
+		END ELSE
+			RESULT = RESULT : 'Failed to open VOC file' : LF
+			CLOSE Voc
+		END
+	END
+	
+	RETURN
+
+END
