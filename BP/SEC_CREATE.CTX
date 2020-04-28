@@ -16,7 +16,7 @@ $INCLUDE UNIVERSE.INCLUDE SSL.H
 **
 ** COMMON varibales
 **
-certroot = @PATH:"\certs\"
+certroot = @PATH:"/certs/"
 certpath = ""
 status = 0
 ctx = ""
