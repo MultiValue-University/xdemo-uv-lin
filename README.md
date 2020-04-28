@@ -19,4 +19,4 @@ The command above will take the entire external xdemo-uv-lin repository and crea
 * [Configure and use replication](docs/replication/config_replication.md)
 * [Configure and use OpenSSL1.1.1](docs/openssl1.1.1/config_openssl.md)
 * [Run Datetime Sample](docs/datetime/readme.md)
-* [Run Geospatial Sample] (docs/geospatial/readme.md)
+* [Run Geospatial Sample](docs/geospatial/readme.md)
