@@ -1,0 +1,8 @@
+$INCLUDE UNIVERSE.INCLUDE SSL.H
+ret = protocolLogging("tls13.log", "ON", 10)
+ERR = createSecurityContext(H.SECURITY,"TLSv1.3")
+ERR = addAuthenticationRule(H.SECURITY, '2', 'ServerName', 'blog.cloudflare.com')
+ERR = createSecureRequest("https://blog.cloudflare.com","GET",H.REQUEST,H.SECURITY)
+ERR = submitRequest(H.REQUEST,3600,"",RESP.HEADER,RESP.DATA,HTTP.STATUS)
+PRINT "Use protocol TLSv1.3, http status = ":HTTP.STATUS
+END
