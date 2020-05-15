@@ -47,6 +47,9 @@ then
    exit 1
 fi
 
+#adding $uvhomedir/bin to the current path
+export PATH="$PATH:$uvhomedir/bin/"
+
 if [ "$1" = "clean" ] 
 then
 
