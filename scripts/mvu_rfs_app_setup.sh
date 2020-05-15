@@ -111,19 +111,19 @@ then
    exit 1 
 fi
 
-if [ -f TEST2 -a -f D_TEST2 ] 
+if [ -f TEST2 -o -f D_TEST2 ] 
 then
    echo "TEST2 exists"
    exit 1 
 fi
 
-if [ -f TEST3 -a -f D_TEST3 ] 
+if [ -f TEST3 -o -f D_TEST3 ] 
 then
    echo "TEST3 exists"
    exit 1 
 fi
 
-if [ -f TEST4 -a -f D_TEST4 ] 
+if [ -f TEST4 -o -f D_TEST4 ] 
 then
    echo "TEST4 exists"
    exit 1 
