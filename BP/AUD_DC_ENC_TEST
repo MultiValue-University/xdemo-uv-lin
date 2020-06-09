@@ -1,0 +1,162 @@
+*
+* Sample program to test Audit Data Change Capture with ADE data
+*
+* Test Steps (recommended run as non-root user except when specified otherwise):
+* 1. Set up: RUN BP AUD_DC_ENC_TEST 1, then exit session
+* 2. Configue: as root, at OS prompt, run "audman -config", add the following 4 lines (remove *):
+* account=XDEMO:/nome3/MVU/XDEMO
+* app1_events=DAT.BASIC.WRITE,DAT.BASIC.DELETE
+* app1_events.file=XDEMO:ENC_FIELD
+* app1_events.dataChange=on
+* NOTE: CHANGE THE ABOVE PATH TO THE ACTUAL PATH ON YOUR TEST SYSTEM!!!
+* 3. Test:   RUN BP AUD_DC_ENC_TEST 2, after test exit session
+* YOU CAN RUN THE ABOVE TESTS MULTIPLE TIMES IN THE SAME SESSION
+* 4. Cleanup:RUN BP AUD_DC_ENC_TEST 3 (in a new session)
+* 
+
+$DEFINE UNIVERSE
+*$DEFINE UNIDATA
+
+STAGE=""
+
+$IFDEF UNIDATA
+IF SYSTEM(9010) = "UV" OR SYSTEM(9010) = "UV.PE" THEN
+	PRINT "You must change $DEFINE to UNIVERSE in the beginning of the program!"
+	STOP
+END
+sys = SYSTEM(33)
+IF sys="UNIX" THEN OS_TYPE=sys ELSE OS_TYPE="MSWIN"
+
+SENTENCE = TRIM(@SENTENCE)
+STAGE=FIELD(SENTENCE, " ", 4)
+
+$ELSE  * for UniVerse
+
+IF SYSTEM(9010) = "UD" THEN
+	PRINT "You must change $DEFINE to UNIDATA in the beginning of the program!"
+	STOP
+END
+$INCLUDE UNIVERSE.INCLUDE MACHINE.NAME
+OS_TYPE = OS.TYPE
+GET(ARG.) STAGE
+$ENDIF
+
+IF STAGE <> 1 AND STAGE <> 2 AND STAGE <> 3 THEN
+	PRINT
+	PRINT "Usage: RUN BP AUD_DC_ENC_TEST <stage-number>"
+	PRINT "<stage-number> 1-preparation, 2-test execution, 3-cleanup"
+	PRINT "You must run stage 1 first, exit session, enter a new"
+	PRINT "session, then run the same program with stage 2"
+	PRINT "Stage 2 can be run multiple times"
+	PRINT "NOTE: stage 1 and 3 must be run under root/Administrator"
+	PRINT
+	STOP
+END
+
+IF STAGE = 1 OR STAGE = 3 THEN
+	isroot = 0
+$IFDEF UNIDATA
+	IF OS_TYPE = "UNIX" THEN
+		IF @UID=0 THEN isroot = 1
+	END ELSE
+		IF SYSTEM(516)=1 THEN isroot = 1
+	END
+$ELSE
+	IF SYSTEM(27) = 0 THEN isroot = 1
+$ENDIF
+
+	IF isroot = 1 THEN
+		PRINT "It is recommended you run this program as non-root user"
+		PRINT "Do you want to continue? (Y/N): "
+		INPUT ANS
+		IF ANS <> "Y" AND ANS <> "y" THEN
+			STOP
+		END
+	END
+END
+
+***
+*** Prep stage
+***
+IF STAGE = 1 THEN
+
+PRINT "Preparation stage starts..."
+PRINT "Create encryption keys..."
+CALL DO_CMD("CREATE.ENCRYPTION.KEY AUDENCKEY1 U2Rocket")
+CALL DO_CMD("CREATE.ENCRYPTION.KEY AUDENCKEY2 U2Rocket")
+CALL DO_CMD("GRANT.ENCRYPTION.KEY AUDENCKEY1 U2Rocket PUBLIC")
+CALL DO_CMD("GRANT.ENCRYPTION.KEY AUDENCKEY2 U2Rocket PUBLIC")
+
+PRINT "Preparing encryption files..."
+CALL DO_CMD("CREATE.FILE ENC_FIELD 3 1")
+CALL DO_CMD("COPY FROM DICT VOC TO DICT ENC_FIELD ALL OVERWRITING")
+CALL DO_CMD("ENCRYPT.FILE ENC_FIELD F1,AES256,AUDENCKEY1,U2Rocket F3,AES256,AUDENCKEY2,U2Rocket")
+
+PRINT "Prep stage finished! Exit session, configure audit logging, then re-run with stage 2"
+STOP
+END
+
+***
+*** Test stage
+***
+IF STAGE = 2 THEN
+PRINT "Test stage starts..."
+ACTIVATEKEY "AUDENCKEY1","U2Rocket" ON ERROR STOP "activate key 1 error"
+ACTIVATEKEY "AUDENCKEY2","U2Rocket" ON ERROR STOP "activate key 2 error"
+
+PRINT "Performing field-mode test..." 
+CALL DO_TEST(1)
+
+PRINT "Test Finished"
+
+STOP
+END
+
+***
+*** Cleanup stage
+***
+IF STAGE = 3 THEN
+
+PRINT "Clean up..."
+CALL DO_CMD("DELETE.FILE ENC_FIELD")
+CALL DO_CMD("DELETE.ENCRYPTION.KEY FORCE AUDENCKEY1 U2Rocket")
+CALL DO_CMD("DELETE.ENCRYPTION.KEY FORCE AUDENCKEY2 U2Rocket")
+
+PRINT "Cleanup Finished"
+STOP
+END
+
+*** main program ends here ***
+
+***
+*** subroutines
+***
+SUBROUTINE DO_CMD(cmd)
+EXECUTE cmd CAPTURING out
+PRINT out
+RETURN
+END
+
+SUBROUTINE DO_TEST(mode)
+IF mode = 1 THEN
+	OPEN 'ENC_FIELD' TO F ELSE STOP "open error"
+END
+
+*** WRITEV mode ***
+rec1 = "1111":@FM:"3333"
+flds = 1:@FM:3
+WRITEV rec1 TO F,"1",flds ON ERROR STOP "write error"
+
+rec1 = "new1111":@FM:"new3333"
+WRITEV rec1 TO F,"1",flds ON ERROR STOP "write error"
+rec1 = "newnew1111":@FM:""
+WRITEV rec1 TO F,"1",flds ON ERROR STOP "write error"
+rec1 = "":@FM:"final1111"
+WRITEV rec1 TO F,"1",flds ON ERROR STOP "write error"
+
+DELETE F,"1" ON ERROR STOP "delete error"
+
+CLOSE F
+RETURN
+
+END
