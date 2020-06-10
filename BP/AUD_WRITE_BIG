@@ -1,0 +1,36 @@
+PRINT "number of records: ":
+INPUT count
+
+OPEN "AUDBIG" TO BIGF ELSE STOP "open error"
+
+rec = STR('*', 256)
+GOTO TEST:
+
+CREATEBIG:
+CLEARFILE BIGF
+
+rec = STR('*', 250)
+FOR I=1 TO count
+	WRITE rec TO BIGF,I ON ERROR STOP "write error"
+NEXT
+
+TEST:
+start_c = SYSTEM(9)
+start_e = SYSTEM(12)
+
+FOR I = 1 TO count
+	kid = RND(100000) + 1
+	WRITE rec TO BIGF,kid ON ERROR STOP "write error"
+	IF MOD(I, 10000)=0 THEN PRINT "*":
+NEXT I
+PRINT
+
+PRINT "TEST big file read finished"
+PRINT "CPU time used: ":SYSTEM(9)-start_c
+PRINT "Elapsed time : ":SYSTEM(12)-start_e
+
+CLOSE BIGF
+
+STOP
+END
+
