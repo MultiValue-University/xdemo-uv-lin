@@ -1,19 +1,18 @@
 # Set up ADE
 
->1. Set up Master key as root, at OS prompt, run .
->
->      ```
->      cd $UVHOME
->      bin/uvregen -m SYSGEN
->      ```
->
->2. Create the key store, as root, run
->
->      ```
->      cd $UVHOME
->      bin/encman -genkeystore
->      ```
->
+1. Set up Master key as root, at OS prompt, run .
+
+   ```
+   cd $UVHOME
+   bin/uvregen -m SYSGEN
+   ```
+
+2. Create the key store, as root, run
+
+   ```
+   cd $UVHOME
+   bin/encman -genkeystore
+   ```
 
 # Sample program to test Audit Data Change Capture with ADE data
 
